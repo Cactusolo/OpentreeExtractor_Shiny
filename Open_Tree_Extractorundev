@@ -1,0 +1,69 @@
+library("shiny")
+library("ape")
+library("rotl")
+
+# Define UI
+
+ui <- fluidPage(
+  
+  titlePanel("Open Tree Extractor"),
+  
+  fileInput('target_upload', 'Choose csv file to upload',
+            accept = c(
+              'text/csv',
+              'text/comma-separated-values',
+              '.csv'
+            )),
+  tags$hr(),
+  checkboxInput("header", "Header", TRUE),
+  
+  radioButtons("separator","Separator: ",choices = c(",", ";", ":"), selected=",", inline=TRUE),
+  
+  mainPanel(
+    tabsetPanel(
+      tabPanel("Table", dataTableOutput("table"), downloadButton("DownloadTable", "Download Table")),
+      tabPanel("Tree_Plot", plotOutput("plot"), downloadButton("DownloadTree", "Download Tree"))
+    )
+  )
+)
+
+# Define server logic
+server <- shinyServer(function(input, output) {
+  df <- reactive({read.csv(input$target_upload$datapath,
+                 header = input$header,
+                 sep = input$separator, stringsAsFactors=FALSE, quote="")
+  })
+  reactive({names(df) <- c("Common_Name", "Scientific_Name")})
+  Scientific_Name <- quote({df$Scientific_Name})
+  
+  species <- reactive(tnrs_match_names(names = as.character(Scientific_Name)), quoted = TRUE)
+  
+  
+  output$table <- renderDataTable({
+
+    if (is.null(input$target_upload))
+      return(NULL)
+    species()
+  })
+  
+  #Tree plot
+  
+  output$plot <-renderPlot({
+    inFile <- input$target_upload
+    if (is.null(inFile))
+      return(NULL)
+    df <- read.csv(inFile$datapath,
+                   header = input$header,
+                   sep = input$separator, stringsAsFactors=FALSE, quote="")
+    names(df) <- c("Common_Name", "Scientific_Name")
+    species <- tnrs_match_names(names = df$Scientific_Name)
+    
+    tree <- tol_induced_subtree(ott_ids=species$ott_id, label_format = "name")
+    plot.phylo(tree)
+    
+  })
+  
+  
+})
+ # Run the application 
+shinyApp(ui = ui, server = server)
